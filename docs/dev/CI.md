@@ -1,3 +1,28 @@
-# CI
+# CI 合同
 
-CI_NONE：当前无托管 CI。提交前执行 ./run.sh ci（锁文件、Ruff、格式、pytest、smoke），记录实际 commit 与结果。未执行不得称 PASS。原生 GPU 物理实验独立验收。
+## 普通 CPU 检查
+
+统一执行 `./run.sh ci`。它按顺序运行：
+
+1. `uv lock --check`：依赖声明和锁文件一致。
+2. `uv sync --locked`：在个人/CI 独立环境同步锁定依赖。
+3. `uv run --locked --no-sync ruff check .`：静态检查。
+4. `uv run --locked --no-sync ruff format --check .`：格式检查。
+5. `uv run --locked --no-sync pytest`：自动化测试。
+6. 软件 smoke：配置读取、入口执行与真实实验未配置状态。
+
+任何必需检查非零退出即失败。CI 不安装大型仿真平台、不跑 GPU、不访问共享服务器、不执行真实机器人。模板当前为低成本 CPU 检查。
+
+## 托管 CI
+
+提供实际 [.github/workflows/ci.yml](../../.github/workflows/ci.yml)（从 main 上存在该工作流后手动选择目标分支执行）。仅 workflow_dispatch，默认不自动消耗私有仓库 CI 额度。统一使用同一个脚本，限制权限与执行时间，不使用共享科研服务器作为通用 runner。Actions 依赖固定 commit，uv 版本固定。
+
+待项目维护者确认配额及计划后，可在单独 PR 中启用 pull_request 自动触发并将实际检查设置为合并门；若平台套餐不支持强制保护，先依靠团队自觉审阅。未运行、取消、跳过和旧 commit 的检查不能代替当前候选的 PASS。记录 PR head、必要时基线与集成 commit、运行链接及结果；代码更新后重新执行对应检查。若 CI 不可用，保留明确原因，不伪造通过。
+
+## 原生科研验收
+
+项目按实际风险划分软件、Mock、CPU 仿真、原生 MuJoCo / PhysX、实机等层级；GPU 和实机在独立获授权环境运行。记录真实 commit、环境、资产、配置、种子、资源峰值、运行时间、成功门槛和失败证据；按任务合同判断是否满足合并/发布/交接条件。CI 绿色不等于科研成功。
+
+## CI 变更要求
+
+修改 CI 入口、依赖或工作流时同步更新本文件和测试，避免文档、脚本及托管任务的命令漂移。项目应记录运行成本、权限、实际启用状态和负责人；未确认的 GitHub 管理权限或配额不作承诺。
