@@ -6,7 +6,13 @@ from pathlib import Path
 
 import pytest
 
-from research_project.contracts import read_smoke_config
+from research_project.__main__ import audit_handoff
+from research_project.contracts import (
+    read_release_manifest,
+    read_smoke_config,
+    validate_output_path,
+    verify_asset_manifest,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -71,3 +77,152 @@ def test_smoke_receipt_has_explicit_evidence_scope() -> None:
     assert report["check_elapsed_seconds"] >= 0
     assert "source_commit" in report
     assert "source_dirty" in report
+
+
+def test_doctor_supports_python_311_plus_and_reports_runtime_mode() -> None:
+    result = subprocess.run(
+        [sys.executable, "-m", "research_project", "doctor"],
+        capture_output=True,
+        text=True,
+        cwd=ROOT,
+        check=True,
+    )
+    report = json.loads(result.stdout)
+    assert report["status"] == "PASS"
+    assert report["python_min_required"] == "3.11"
+    assert report["runtime_mode"] in {"personal-dev", "shared-runtime"}
+    assert report["scientific_result"] == "NOT_TESTED"
+
+
+def test_release_manifest_provenance_and_fail_closed(tmp_path: Path) -> None:
+    assert read_release_manifest(tmp_path) is None
+    manifest = tmp_path / "RELEASE_MANIFEST.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "source_commit": "0123456789abcdef0123456789abcdef01234567",
+                "release_version": "0.3.0",
+            }
+        ),
+        encoding="utf-8",
+    )
+    info = read_release_manifest(tmp_path)
+    assert info is not None
+    assert info["source_commit"] == "0123456789abcdef0123456789abcdef01234567"
+    assert info["source_provenance"] == "release-manifest-declared"
+    assert info["release_version"] == "0.3.0"
+
+    manifest.write_text(json.dumps({"schema_version": 2, "source_commit": "x"}), encoding="utf-8")
+    with pytest.raises(ValueError):
+        read_release_manifest(tmp_path)
+
+
+def test_asset_manifest_verifies_sha256_and_fails_closed(tmp_path: Path) -> None:
+    asset = tmp_path / "robot.urdf"
+    payload = b"<robot name='kepler_k2'/>\n"
+    asset.write_bytes(payload)
+    digest = hashlib.sha256(payload).hexdigest()
+    manifest = tmp_path / "assets.toml"
+    manifest.write_text(
+        f'schema_version = 1\n\n[[assets]]\nname = "k2_urdf"\n'
+        f'path = "robot.urdf"\nsha256 = "{digest}"\n',
+        encoding="utf-8",
+    )
+    verified = verify_asset_manifest(manifest)
+    assert len(verified["verified_assets"]) == 1
+    assert verified["verified_assets"][0]["sha256"] == digest
+
+    asset.write_bytes(b"tampered")
+    with pytest.raises(ValueError, match="SHA-256 mismatch"):
+        verify_asset_manifest(manifest)
+
+
+def test_output_path_isolation_guards_protected_and_runtime_paths(tmp_path: Path) -> None:
+    (tmp_path / "src").mkdir()
+    (tmp_path / "outputs").mkdir()
+    with pytest.raises(ValueError, match="protected directory"):
+        validate_output_path(tmp_path / "src" / "receipt.json", tmp_path, runtime_mode=False)
+    with pytest.raises(ValueError, match="read-only or shared runtime"):
+        validate_output_path(tmp_path / "outputs" / "receipt.json", tmp_path, runtime_mode=True)
+    safe = validate_output_path(tmp_path.parent / "personal_out.json", tmp_path, runtime_mode=True)
+    assert safe.name == "personal_out.json"
+
+
+def test_audit_handoff_flags_placeholders_without_faking_ready(tmp_path: Path) -> None:
+    (tmp_path / "README.md").write_text("# Demo\n", encoding="utf-8")
+    (tmp_path / "HANDOFF.md").write_text("状态：待实例化\n", encoding="utf-8")
+    report = audit_handoff(tmp_path)
+    assert report["status"] == "PASS"
+    assert report["handoff_ready"] is False
+    assert any("待实例化" in w for w in report["warnings"])
+
+
+def test_release_rejects_unverified_commit_label(tmp_path: Path) -> None:
+    (tmp_path / "RELEASE_MANIFEST.json").write_text(
+        json.dumps({"schema_version": 1, "source_commit": "made-up"})
+    )
+    with pytest.raises(ValueError, match="full Git"):
+        read_release_manifest(tmp_path)
+
+
+def test_audit_never_claims_human_acceptance(tmp_path: Path) -> None:
+    (tmp_path / "README.md").write_text("# empty\n")
+    report = audit_handoff(tmp_path)
+    assert report["handoff_ready"] is not True
+    assert report["handoff_readiness"] == "NOT_VERIFIED"
+    assert report["git_hygiene"] == "NOT_TESTED"
+
+
+def test_asset_cli_and_exclusive_receipt(tmp_path: Path) -> None:
+    asset = tmp_path / "model.bin"
+    asset.write_bytes(b"sample")
+    digest = hashlib.sha256(asset.read_bytes()).hexdigest()
+    manifest = tmp_path / "assets.toml"
+    manifest.write_text(
+        f'schema_version = 1\n[[assets]]\nname = "model"\npath = "model.bin"\nsha256 = "{digest}"\n'
+    )
+    target = tmp_path / "receipt.json"
+    args = [
+        sys.executable,
+        "-m",
+        "research_project",
+        "doctor",
+        "--asset-manifest",
+        str(manifest),
+        "--receipt-out",
+        str(target),
+    ]
+    result = subprocess.run(args, cwd=ROOT, capture_output=True, text=True, check=True)
+    assert json.loads(result.stdout)["verified_assets"][0]["sha256"] == digest
+    original = target.read_bytes()
+    assert subprocess.run(args, cwd=ROOT, capture_output=True, check=False).returncode == 2
+    assert target.read_bytes() == original
+    asset.write_bytes(b"tampered")
+    args[-1] = str(tmp_path / "second.json")
+    bad = subprocess.run(args, cwd=ROOT, capture_output=True, check=False)
+    assert bad.returncode == 2
+    assert not (tmp_path / "second.json").exists()
+
+
+def test_output_protects_all_source_and_existing_files(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "README.md").write_text("keep")
+    with pytest.raises(ValueError, match="overwrite"):
+        validate_output_path(repo / "README.md", repo)
+    with pytest.raises(ValueError, match="protected"):
+        validate_output_path(repo / "new.py", repo)
+    (repo / "outputs").mkdir()
+    assert (
+        validate_output_path(repo / "outputs/run.json", repo)
+        == (repo / "outputs/run.json").resolve()
+    )
+
+
+def test_shared_prefix_blocks_receipts(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    shared = tmp_path / "shared"
+    shared.mkdir()
+    monkeypatch.setenv("RESEARCH_SHARED_PREFIXES", str(shared))
+    with pytest.raises(ValueError, match="configured shared"):
+        validate_output_path(shared / "run.json", tmp_path / "repo")

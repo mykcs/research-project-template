@@ -1,38 +1,25 @@
 # Research Project Template
 
-**V0.3 · 独立改进候选**。可运行的科研项目起点，不包含机器人算法或真实实验结果。
+**V0.3 融合候选 · 协商稿**。支持工程交接与科研探索的可运行模板。当前没有真实机器人算法、仿真结果或公共发布。
 
-## 个人开发：第一次使用
+## 第一次运行
 
-从 Git clone 到自己的目录，进入仓库根目录（不要求目录名与模板相同）。安装 Python 3.12 和 uv 后，执行：
+进入本人 clone 的目录（任意目录名），准备 Python 3.11–3.13、uv；默认开发版本 3.12。
 
 ```bash
 ./run.sh ci
 ```
 
-这条命令在个人目录创建/同步锁定环境，并运行软件验证。预期：锁文件、Ruff、pytest、doctor 和软件 smoke 通过；不会启动 GPU、仿真器或实机。
+在个人工作区显式准备锁定环境并执行软件检查；不运行 GPU 或真实机器人。以后 `./run.sh doctor`、`./run.sh smoke`、`./run.sh audit` 不安装依赖。首次环境未准备时提示 bootstrap/ci。更多命令：`./run.sh --help`。
 
-以后日常使用：
+doctor/smoke 可选 `--asset-manifest` 校验可信输入的 SHA-256，`--receipt-out` 写入一个不存在的新收据文件，父目录须为已有个人输出目录。audit 是辅助检查，不证明交接通过；reproduce 在尚无真实科研实验时返回非零。
 
-```bash
-./run.sh doctor
-./run.sh smoke
-```
+## 导航
 
-这两个命令不会安装或升级依赖。首次使用尚未准备环境时，doctor 会明确提示执行 `./run.sh bootstrap`（只准备依赖）或 `./run.sh ci`。其他命令通过 `./run.sh --help` 发现。
+- [Task 与交接](docs/task/README.md)：上游、主线、现状与验收；[交接清单](docs/task/HANDOFF.md)。
+- [Dev](docs/dev/README.md)：依赖、CI、资源、共享环境与发布。
+- [Design](docs/design/README.md)：接口、架构、决策；[Wish](docs/wish/README.md)：原始意图及未立项目标。
+- [Experiments](docs/experiments/README.md)：真实证据与复现；[Research（科研项目按需）](docs/research/README.md)：研究问题、假设、基线、实验协议及发现。
+- [团队协作规范](docs/dev/RESEARCH_COLLABORATION_STANDARD.md)：必需、条件必需、推荐与可选。
 
-smoke 输出带配置指纹、验证范围和 Git 身份（可确认时）的 JSON 收据；`./run.sh reproduce` 在真实科研实验未配置时明确失败。软件检查不等于科研成功。
-
-## 正式版本运行
-
-团队协商并完成发布后，从正式版本入口运行。启动器支持通过 `RESEARCH_RUNTIME_PYTHON` 指定经验证的版本化公共环境解释器；此模式不会调用 uv 安装或同步依赖，启动时解析环境父目录的真实路径，同时保留 Python 自身的虚拟环境解释器链接。具体部署路径、环境版本、运行命令由各项目在交接前实测并写入 README。见 [环境](docs/dev/ENVIRONMENT.md) 和 [服务器](docs/dev/SERVER.md)。
-
-## 交接入口
-
-模板目录与工具是推荐实现，不是强制格式。必需的是交接信息、可运行能力、安全及验证证据；可沿用项目现有文档和等价工具。参考资料库、Wish、独立 ADR 等可按需要省略。详见 [规范分级](docs/dev/RESEARCH_COLLABORATION_STANDARD.md) 和 [交接验收](docs/task/HANDOFF.md)。
-
-[Task](docs/task/README.md) · [Dev](docs/dev/README.md) · [Design](docs/design/README.md) · [Wish](docs/wish/README.md) · [Experiments](docs/experiments/README.md)
-
-将模板用于实际项目时，替换示例目标和配置，填写项目真实入口、现状、资源、证据与维护者；README 的首次运行命令应由接手者在干净个人 checkout 独立验证。无需重写已有有效目录结构。
-
-本版本没有配置正式仿真环境、原生 GPU 实验或服务器发布；权限和自动同步暂为团队讨论事项。
+既有项目可采用等价结构与工具，不要求照搬目录。新项目替换模板信息，填写真实资源、命令、结果、负责人及反馈渠道；验证接手者能从干净 checkout 独立运行。共享环境仅使用管理员认可的固定版本解释器；不安装公共依赖。具体例子见 Dev。
