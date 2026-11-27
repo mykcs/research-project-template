@@ -21,3 +21,7 @@
 公共环境变更采用新版本，经过环境导入、CPU/GPU 及真实代表性实验验证后由维护者发布；旧实验仍固定其原版本。个人日志、缓存、视频和训练结果独立保存。团队扩大或依赖冲突时再评估 Docker / Apptainer，不强制提前迁移。
 
 参考：[Isaac Lab 外部项目生成](https://docs.nvidia.com/isaaclab/3.0/developer-tools/build-your-own-project-or-task)、[uv locking and syncing](https://docs.astral.sh/uv/concepts/projects/sync/)。
+
+## 多模型/多基线与跨仓依赖（适用时）
+
+模型或 baseline 存在 PyTorch、CUDA、Transformers 等依赖冲突时，推荐各自使用独立、可复现的环境，复用公共数据/接口/适配代码；不为统一环境而强行兼容或复制整套核心源码。基线环境不要求固定目录名或同一个包管理器。外部平台、模型、资产与源码需记录实际版本或指纹及兼容条件；无权提供的资源不得复制，缺失时明确阻塞。公共环境验证包括独立成员实际访问/运行；单账号通过不能推出其他账号可用。CUDA 可见性配置不能冒充操作系统级隔离。

@@ -12,7 +12,7 @@ cd "$HOME/research-project-template"
 ./run.sh ci
 ```
 
-`./run.sh smoke` 是软件冒烟检查；`./run.sh reproduce` 在真实实验未配置时明确失败。
+`./run.sh smoke` 是软件冒烟检查，输出带配置指纹、验证范围和 Git 身份（可确认时）的 JSON 收据；doctor 同时检查配置契约。`./run.sh reproduce` 在真实实验未配置时明确失败。
 
 ## 正式版本运行
 

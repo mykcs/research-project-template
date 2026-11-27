@@ -76,5 +76,8 @@ def test_release_entry_does_not_write_source(tmp_path: Path) -> None:
         check=True,
     )
     after = sorted(str(path.relative_to(release)) for path in release.rglob("*"))
-    assert json.loads(result.stdout)["status"] == "PASS"
+    report = json.loads(result.stdout)
+    assert report["status"] == "PASS"
+    assert report["source_commit"] == "UNKNOWN"
+    assert report["scientific_result"] == "NOT_TESTED"
     assert before == after

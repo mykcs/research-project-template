@@ -1,2 +1,3 @@
 # 软件检查，不是科研实验。
+schema_version = 1
 kind = "software-smoke"
