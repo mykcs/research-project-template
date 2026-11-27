@@ -81,3 +81,83 @@ def test_release_entry_does_not_write_source(tmp_path: Path) -> None:
     assert report["source_commit"] == "UNKNOWN"
     assert report["scientific_result"] == "NOT_TESTED"
     assert before == after
+
+
+def test_help_does_not_require_an_environment(tmp_path: Path) -> None:
+    launcher = tmp_path / "run.sh"
+    shutil.copy2(ROOT / "run.sh", launcher)
+    env = {**os.environ, "PATH": "/usr/bin:/bin"}
+    env.pop("RESEARCH_RUNTIME_PYTHON", None)
+    result = subprocess.run(
+        [str(launcher), "--help"], env=env, capture_output=True, text=True, check=True
+    )
+    assert "bootstrap" in result.stdout
+    assert not (tmp_path / ".venv").exists()
+
+
+def test_missing_environment_doctor_never_installs(tmp_path: Path) -> None:
+    launcher = tmp_path / "run.sh"
+    shutil.copy2(ROOT / "run.sh", launcher)
+    trap_dir = tmp_path / "trap"
+    trap_dir.mkdir()
+    marker = tmp_path / "uv-was-invoked"
+    trap = trap_dir / "uv"
+    trap.write_text('#!/bin/sh\ntouch "$UV_TRAP_MARKER"\nexit 99\n')
+    trap.chmod(0o755)
+    env = {
+        **os.environ,
+        "PATH": f"{trap_dir}:/usr/bin:/bin",
+        "UV_TRAP_MARKER": str(marker),
+    }
+    env.pop("RESEARCH_RUNTIME_PYTHON", None)
+    result = subprocess.run(
+        [str(launcher), "doctor"], env=env, capture_output=True, text=True, check=False
+    )
+    assert result.returncode == 2
+    assert "bootstrap" in result.stderr
+    assert not marker.exists()
+    assert not (tmp_path / ".venv").exists()
+
+
+def test_prepared_doctor_and_smoke_never_call_uv() -> None:
+    env = {**os.environ, "PATH": "/usr/bin:/bin"}
+    env.pop("RESEARCH_RUNTIME_PYTHON", None)
+    for command in ("doctor", "smoke"):
+        result = subprocess.run(
+            [str(ROOT / "run.sh"), command],
+            env=env,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        report = json.loads(result.stdout)
+        assert report["status"] == "PASS"
+        assert report["scientific_result"] == "NOT_TESTED"
+
+
+def test_runtime_pins_alias_without_resolving_executable_link(tmp_path: Path) -> None:
+    bin_dir = tmp_path / "version-a" / "bin"
+    bin_dir.mkdir(parents=True)
+    wrapper = bin_dir / "wrapped-python"
+    wrapper.write_text(
+        '#!/bin/sh\n[ "$0" = "$EXPECTED_RUNTIME" ] || exit 99\nexec "$ACTUAL_PYTHON" "$@"\n'
+    )
+    wrapper.chmod(0o755)
+    python = bin_dir / "python"
+    python.symlink_to(wrapper.name)
+    current = tmp_path / "current"
+    current.symlink_to(bin_dir.parent, target_is_directory=True)
+    env = {
+        **runtime_env(),
+        "RESEARCH_RUNTIME_PYTHON": str(current / "bin" / "python"),
+        "EXPECTED_RUNTIME": str(python),
+        "ACTUAL_PYTHON": sys.executable,
+    }
+    result = subprocess.run(
+        [str(ROOT / "run.sh"), "doctor"],
+        env=env,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert json.loads(result.stdout)["status"] == "PASS"

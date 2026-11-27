@@ -1,12 +1,12 @@
 # 接口
 
-run.sh doctor/smoke/test/lint/ci 为软件入口。reproduce 尚未注册真实实验，必须失败退出；不可用 smoke 替代。
+run.sh --help 发现入口；bootstrap/ci 显式准备个人依赖，doctor/smoke/test/lint 不同步依赖。reproduce 尚未注册真实实验，必须失败退出；不可用 smoke 替代。
 
 ## 本模板的最小可执行契约
 
 - 输入：`configs/smoke.toml`，kind 为 software-smoke，schema_version 为整数 1；V0.1 未声明版本的旧配置兼容 v1。
 - 未知字段、未知版本或错误类型明确拒绝，不静默忽略。读取和 SHA-256 使用同一份字节，源文件不修改。
-- doctor 检查 Python 和配置，smoke 执行软件检查，二者均输出带版本的 JSON 收据，不启动仿真或硬件。
+- doctor 检查 Python 和配置，smoke 执行软件检查；在环境已准备且输入有效时输出带版本的 JSON 收据。缺失个人环境明确阻塞，不安装依赖；不启动仿真或硬件。
 - reproduce 在没有真实实验注册时返回非零退出码。
 - 契约实现与回归测试分别见 `src/research_project/contracts.py`、`tests/test_contracts.py`。
 
