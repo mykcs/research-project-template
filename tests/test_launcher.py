@@ -81,3 +81,56 @@ def test_release_entry_does_not_write_source(tmp_path: Path) -> None:
     assert report["source_commit"] == "UNKNOWN"
     assert report["scientific_result"] == "NOT_TESTED"
     assert before == after
+
+
+def test_release_manifest_blocks_dev_sync_and_reports_commit(tmp_path: Path) -> None:
+    release = tmp_path / "published_v03"
+    release.mkdir(parents=True)
+    shutil.copy2(ROOT / "run.sh", release / "run.sh")
+    shutil.copytree(ROOT / "configs", release / "configs")
+    shutil.copytree(
+        ROOT / "src",
+        release / "src",
+        ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
+    )
+    (release / "RELEASE_MANIFEST.json").write_text(
+        json.dumps({"schema_version": 1, "source_commit": "deadbeef1234", "release_version": "0.3"}),
+        encoding="utf-8",
+    )
+
+    dev_env = {**os.environ, "PATH": "/usr/bin:/bin"}
+    dev_env.pop("RESEARCH_RUNTIME_PYTHON", None)
+    blocked = subprocess.run(
+        [str(release / "run.sh"), "doctor"],
+        env=dev_env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert blocked.returncode == 2
+    assert "RESEARCH_RUNTIME_PYTHON" in blocked.stderr
+
+    out_file = tmp_path / "personal_receipt.json"
+    ok = subprocess.run(
+        [str(release / "run.sh"), "smoke", "--receipt-out", str(out_file)],
+        env=runtime_env(),
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    report = json.loads(ok.stdout)
+    assert report["source_commit"] == "deadbeef1234"
+    assert report["source_provenance"] == "release-manifest"
+    assert json.loads(out_file.read_text(encoding="utf-8"))["run_id"] == report["run_id"]
+
+    rejected_inside = subprocess.run(
+        [str(release / "run.sh"), "smoke", "--receipt-out", str(release / "leak.json")],
+        env=runtime_env(),
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert rejected_inside.returncode == 2
+    assert not (release / "leak.json").exists()
