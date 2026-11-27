@@ -20,6 +20,8 @@ cd "$HOME/research-project-template"
 
 ## 交接入口
 
+模板目录与工具是推荐实现，不是强制格式。必需的是交接信息、可运行能力、安全及验证证据；可沿用项目现有文档和等价工具。参考资料库、Wish、独立 ADR 等可按需要省略。详见 [规范分级](docs/dev/RESEARCH_COLLABORATION_STANDARD.md) 和 [交接验收](docs/task/HANDOFF.md)。
+
 [Task](docs/task/README.md) · [Dev](docs/dev/README.md) · [Design](docs/design/README.md) · [Wish](docs/wish/README.md) · [Experiments](docs/experiments/README.md)
 
 实例化后填写项目目标、上游关系、当前真实进展、资源、已验证运行命令、成果证据、维护者和问题反馈方式。接手者独立运行检查、理解现状、在个人分支修改测试并提交 PR。
