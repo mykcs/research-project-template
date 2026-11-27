@@ -1,11 +1,21 @@
-# 项目协作规则
+# AGENTS.md
 
-先定位项目 README 或等价入口、当前任务、Dev/CI 及适用设计。新项目推荐 src/configs/scripts/tests；保留已有成熟布局，不强制迁移，不为规范创建空壳文件。必需交接内容及适用条件以 Dev 协作协议为准。复用已有接口，不堆临时文件，不提交密钥、缓存和未经许可资产。只修改授权个人工作区，不修改共享 published 目录、公共环境、其他成员工作区或服务器权限。
+Minimal operating rules for AI coding agents in this repository. Keep this file short and non-redundant; do not duplicate directory listings already discoverable from files.
 
-本模板项目变更须执行 ./run.sh ci；其他项目可采用等价验证入口。记录实际 commit 与检查结果。原生仿真独立验收，不降低科研门槛，不以 Mock、CPU CI、视频拼接冒充物理成功。CI 只运行声明的低成本软件检查，不用共享科研 GPU 充当通用 runner。未验证的结果标记未验证。
+## Essential Commands
+- Personal dev checks (before PR): `./run.sh ci` (lock check, ruff, pytest, smoke, handoff audit).
+- Read-only shared runtime check (no `uv`, no writes to checkout):
+  `RESEARCH_RUNTIME_PYTHON=/abs/path/to/python ./run.sh doctor|smoke|audit`
+- Persist receipts outside checkout: `--receipt-out /path/to/personal_outputs/receipt.json`
 
-公共运行环境不执行 uv sync 或 editable install。任何权限、公共环境、发布机制变更由有权维护者按团队共识执行。AI 重要贡献记录实际工具、模型和验证依据，未知不猜测。
+## Hard Safety Boundaries
+- **Never** modify shared/published directories, public simulation environments, other members' workspaces, or server permissions.
+- **Never** run `uv sync`, `uv run`, or editable installs inside a shared/read-only checkout or public runtime environment.
+- **Never** equate CPU CI, unit tests, mocks, or stitched clips with native simulation or real-robot scientific success. Unconfigured `reproduce` must fail closed.
+- **Never** trigger GPU experiments, paid cloud runners, or automatic hosted CI without explicit approval.
+- **Never** commit `.venv/`, checkpoints (`.pt/.pth/.onnx`), rosbag/mcap/USD binaries, or experiment outputs.
 
-个人开发鼓励积极利用 Agent；多人协作时，提交前检查实际 diff、测试与影响范围，合并前进行与风险相称的审阅，必要时邀请相关成员交叉审阅。提交者对 AI 生成内容负责，不以 AI 输出或 CI 通过替代理解与审阅。
-
-涉及公共接口或科研数据时，检查版本、输入输出与兼容性；优先复用已有模块，明确未支持的后端与真实验证边界。必要时运行契约及下游集成检查；外部依赖固定经过验证的版本。参考资料目录与多基线结构按需采用。
+## Collaboration & Provenance
+- Personal workspace: use agents freely to explore, prototype, and test.
+- Shared branches / PRs: verify actual diff, tests, and interface impact before opening a PR; the submitter owns all AI-generated changes.
+- Record real AI provenance (tool, model, role, verification basis) in PRs; mark unknown fields `Unknown` without guessing.
