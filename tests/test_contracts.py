@@ -152,6 +152,8 @@ def test_output_path_isolation_guards_protected_and_runtime_paths(tmp_path: Path
 def test_audit_handoff_flags_placeholders_without_faking_ready(tmp_path: Path) -> None:
     (tmp_path / "README.md").write_text("# Demo\n", encoding="utf-8")
     (tmp_path / "HANDOFF.md").write_text("状态：待实例化\n", encoding="utf-8")
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "module.py").write_text("VALUE = 1\n")
     report = audit_handoff(tmp_path)
     assert report["status"] == "PASS"
     assert report["handoff_ready"] is False
@@ -226,3 +228,24 @@ def test_shared_prefix_blocks_receipts(tmp_path: Path, monkeypatch: pytest.Monke
     monkeypatch.setenv("RESEARCH_SHARED_PREFIXES", str(shared))
     with pytest.raises(ValueError, match="configured shared"):
         validate_output_path(shared / "run.json", tmp_path / "repo")
+
+
+def test_audit_requires_actual_root_src(tmp_path: Path) -> None:
+    assert audit_handoff(tmp_path)["status"] == "FAIL"
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "README.md").write_text("# not source")
+    assert audit_handoff(tmp_path)["status"] == "FAIL"
+    (tmp_path / "src" / "main.py").write_text("VALUE = 1")
+    assert audit_handoff(tmp_path)["status"] == "PASS"
+
+
+def test_audit_website_is_conditional(tmp_path: Path) -> None:
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "main.py").write_text("VALUE = 1")
+    assert audit_handoff(tmp_path)["status"] == "PASS"
+    config = tmp_path / "astro.config.mjs"
+    config.write_text("export default {}")
+    assert audit_handoff(tmp_path)["status"] == "FAIL"
+    (tmp_path / "website").mkdir()
+    config.rename(tmp_path / "website" / config.name)
+    assert audit_handoff(tmp_path)["status"] == "PASS"
