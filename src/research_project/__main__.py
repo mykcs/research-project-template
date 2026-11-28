@@ -65,33 +65,118 @@ def source_identity(root: Path = ROOT) -> dict[str, object]:
     }
 
 
-def audit_handoff(root: Path = ROOT) -> dict[str, object]:
+WEBSITE_CONFIG_PATTERNS = ("astro.config.*", "next.config.*", "nuxt.config.*", "svelte.config.*")
+WEBSITE_SUFFIXES = {
+    ".astro",
+    ".html",
+    ".htm",
+    ".vue",
+    ".svelte",
+    ".js",
+    ".jsx",
+    ".mjs",
+    ".cjs",
+    ".ts",
+    ".tsx",
+    ".mts",
+    ".cts",
+    ".css",
+    ".scss",
+    ".sass",
+    ".less",
+    ".mdx",
+    ".php",
+    ".py",
+    ".rb",
+    ".go",
+    ".rs",
+}
+
+
+def has_source(directory: Path, *, web: bool = False) -> bool:
+    """Minimum source-presence heuristic, not a language or ownership audit."""
+    if directory.is_symlink() or not directory.is_dir():
+        return False
+    ignored = {"__pycache__", "node_modules", "dist", "build"}
+    for path in directory.rglob("*"):
+        parts = path.relative_to(directory).parts
+        if any(part.startswith(".") or part in ignored for part in parts):
+            continue
+        if not path.is_file() or path.is_symlink():
+            continue
+        if web:
+            if path.suffix.lower() in WEBSITE_SUFFIXES and ".config." not in path.name:
+                return True
+        elif path.suffix.lower() not in {".md", ".rst", ".txt", ""}:
+            return True
+    return False
+
+
+def audit_layout(root: Path) -> tuple[str, list[str], list[str]]:
+    """Check declared scope, or apply tentative layout checks if unmarked."""
     findings: list[str] = []
     warnings: list[str] = []
-    source = root / "src"
-    if (
-        source.is_symlink()
-        or not source.is_dir()
-        or not any(
-            path.is_file()
-            and not path.is_symlink()
-            and path.suffix.lower() not in {".md", ".rst", ".txt", ""}
-            and not any(
-                part.startswith(".") or part == "__pycache__"
-                for part in path.relative_to(source).parts
-            )
-            for path in source.rglob("*")
-        )
+    readme = root / "README.md"
+    declarations = (
+        [
+            line.split(":", 1)[1].strip()
+            for line in readme.read_text(encoding="utf-8").splitlines()
+            if line.startswith("Repository profile:")
+        ]
+        if readme.is_file()
+        else []
+    )
+    if len(declarations) > 1 or (
+        declarations and declarations[0] not in {"code", "website", "project"}
     ):
-        findings.append(
-            "Expected actual project source under root src/; no empty directory or symlink."
-        )
+        return "UNKNOWN", ["Declare one valid Repository profile: code, website, or project."], []
+    source = root / "src"
     website = root / "website"
-    if website.is_symlink() or (website.exists() and not website.is_dir()):
-        findings.append("Website, if present, must be an actual root website/ directory.")
-    for pattern in ("astro.config.*", "next.config.*", "nuxt.config.*", "svelte.config.*"):
-        if any(path.is_file() for path in root.glob(pattern)):
-            findings.append(f"Move website framework configuration into website/: {pattern}")
+    website_present = website.exists() or website.is_symlink()
+    root_web_config = [
+        pattern
+        for pattern in WEBSITE_CONFIG_PATTERNS
+        if any(path.is_file() for path in root.glob(pattern))
+    ]
+    # A README scope description can be valid without the recommended machine
+    # marker. Use layout hints only for preliminary checks, never as identity.
+    if declarations:
+        profile = declarations[0]
+    elif website_present:
+        profile = "project" if has_source(source) else "website"
+    elif root_web_config:
+        profile = "website"
+    else:
+        profile = "code"
+    if not declarations:
+        warnings.append(
+            f"No Repository profile declared; tentative {profile} layout check; confirm scope."
+        )
+    if profile in {"code", "project"} and not has_source(source):
+        findings.append("Expected actual non-website source under root src/.")
+    if profile == "code" and website_present:
+        findings.append("Code profile has website/: declare project or website as appropriate.")
+    if profile == "project" and not has_source(website, web=True):
+        findings.append("Project profile needs actual website source under root website/.")
+    if profile == "website":
+        root_site = has_source(source, web=True)
+        nested_site = has_source(website, web=True)
+        if not root_site and not nested_site:
+            findings.append("Website profile needs actual site source in src/ or website/.")
+        if root_site and website_present:
+            findings.append("Use one website source root; do not duplicate src/ and website/.")
+        if source.is_symlink() or website.is_symlink():
+            findings.append("Website source roots must not be symlinks.")
+        if nested_site and source.exists():
+            findings.append("Separate non-website src/ plus website/ belongs to Project profile.")
+    if profile != "website" or website_present:
+        for pattern in root_web_config:
+            findings.append(f"Website framework configuration must follow site root: {pattern}")
+    return profile if declarations else "UNKNOWN", findings, warnings
+
+
+def audit_handoff(root: Path = ROOT) -> dict[str, object]:
+    profile, findings, warnings = audit_layout(root)
     if not (root / "README.md").is_file():
         warnings.append("No root README; identify the equivalent newcomer entry manually.")
     candidates = [
@@ -139,6 +224,7 @@ def audit_handoff(root: Path = ROOT) -> dict[str, object]:
             warnings.append("Could not inspect tracked Git files")
     return {
         "kind": "handoff-audit",
+        "repository_profile": profile,
         "status": "FAIL" if findings else "PASS",
         "handoff_ready": False if findings or warnings else None,
         "handoff_readiness": "NOT_VERIFIED",
