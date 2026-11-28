@@ -239,13 +239,107 @@ def test_audit_requires_actual_root_src(tmp_path: Path) -> None:
     assert audit_handoff(tmp_path)["status"] == "PASS"
 
 
-def test_audit_website_is_conditional(tmp_path: Path) -> None:
-    (tmp_path / "src").mkdir()
-    (tmp_path / "src" / "main.py").write_text("VALUE = 1")
+def write_profile(root: Path, profile: str) -> None:
+    (root / "README.md").write_text(f"# Example\n\nRepository profile: {profile}\n")
+
+
+def create_code(root: Path) -> None:
+    (root / "src").mkdir()
+    (root / "src" / "main.py").write_text("VALUE = 1")
+
+
+def create_website(root: Path) -> None:
+    (root / "src").mkdir(parents=True)
+    (root / "src" / "index.astro").write_text("<h1>Site</h1>")
+    (root / "astro.config.mjs").write_text("export default {}")
+
+
+def test_audit_code_profile_does_not_require_website(tmp_path: Path) -> None:
+    write_profile(tmp_path, "code")
+    create_code(tmp_path)
+    report = audit_handoff(tmp_path)
+    assert report["status"] == "PASS"
+    assert report["repository_profile"] == "code"
+    (tmp_path / "astro.config.mjs").write_text("export default {}")
+    assert audit_handoff(tmp_path)["status"] == "FAIL"
+
+
+def test_audit_independent_website_root_src(tmp_path: Path) -> None:
+    write_profile(tmp_path, "website")
+    create_website(tmp_path)
+    report = audit_handoff(tmp_path)
+    assert report["status"] == "PASS"
+    assert report["repository_profile"] == "website"
+    assert not (tmp_path / "website").exists()
+    assert report["handoff_readiness"] == "NOT_VERIFIED"
+
+
+def test_audit_independent_website_nested_root_without_code(tmp_path: Path) -> None:
+    write_profile(tmp_path, "website")
+    create_website(tmp_path / "website" / "site")
+    assert not (tmp_path / "src").exists()
     assert audit_handoff(tmp_path)["status"] == "PASS"
-    config = tmp_path / "astro.config.mjs"
-    config.write_text("export default {}")
+    (tmp_path / "astro.config.mjs").write_text("export default {}")
+    assert audit_handoff(tmp_path)["status"] == "FAIL"
+
+
+def test_audit_project_requires_both_actual_source_roots(tmp_path: Path) -> None:
+    write_profile(tmp_path, "project")
+    create_code(tmp_path)
     assert audit_handoff(tmp_path)["status"] == "FAIL"
     (tmp_path / "website").mkdir()
-    config.rename(tmp_path / "website" / config.name)
-    assert audit_handoff(tmp_path)["status"] == "PASS"
+    (tmp_path / "website" / "astro.config.mjs").write_text("export default {}")
+    assert audit_handoff(tmp_path)["status"] == "FAIL"
+    create_website(tmp_path / "website")
+    report = audit_handoff(tmp_path)
+    assert report["status"] == "PASS"
+    assert report["repository_profile"] == "project"
+    (tmp_path / "astro.config.mjs").write_text("export default {}")
+    assert audit_handoff(tmp_path)["status"] == "FAIL"
+
+
+def test_audit_does_not_accept_duplicate_or_empty_website(tmp_path: Path) -> None:
+    write_profile(tmp_path, "website")
+    (tmp_path / "website").mkdir()
+    (tmp_path / "website" / "astro.config.mjs").write_text("export default {}")
+    assert audit_handoff(tmp_path)["status"] == "FAIL"
+    create_website(tmp_path)
+    assert audit_handoff(tmp_path)["status"] == "FAIL"
+
+
+def test_audit_rejects_unknown_and_duplicate_profiles(tmp_path: Path) -> None:
+    write_profile(tmp_path, "other")
+    create_code(tmp_path)
+    assert audit_handoff(tmp_path)["status"] == "FAIL"
+    write_profile(tmp_path, "code\nRepository profile: project")
+    assert audit_handoff(tmp_path)["repository_profile"] == "UNKNOWN"
+    assert audit_handoff(tmp_path)["status"] == "FAIL"
+
+
+def test_audit_unmarked_legacy_code_is_advisory(tmp_path: Path) -> None:
+    (tmp_path / "README.md").write_text("# Existing project")
+    create_code(tmp_path)
+    report = audit_handoff(tmp_path)
+    assert report["status"] == "PASS"
+    assert report["repository_profile"] == "UNKNOWN"
+    assert any("No Repository profile declared" in warning for warning in report["warnings"])
+    assert report["handoff_readiness"] == "NOT_VERIFIED"
+
+
+def test_unmarked_website_is_not_misclassified_as_code(tmp_path: Path) -> None:
+    (tmp_path / "README.md").write_text("# Standalone site")
+    create_website(tmp_path)
+    report = audit_handoff(tmp_path)
+    assert report["status"] == "PASS"
+    assert report["repository_profile"] == "UNKNOWN"
+    assert report["handoff_readiness"] == "NOT_VERIFIED"
+
+
+def test_unmarked_combined_project_is_not_misclassified_as_code(tmp_path: Path) -> None:
+    (tmp_path / "README.md").write_text("# Research and companion site")
+    create_code(tmp_path)
+    create_website(tmp_path / "website")
+    report = audit_handoff(tmp_path)
+    assert report["status"] == "PASS"
+    assert report["repository_profile"] == "UNKNOWN"
+    assert report["handoff_readiness"] == "NOT_VERIFIED"
