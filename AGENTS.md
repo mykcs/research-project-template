@@ -1,6 +1,6 @@
 # AGENTS.md
 
-先读 README、当前 Task、适用 Dev/Design/Experiments；科研问题再按需读 Research。优先复用已有接口和工具；不要为规范创建空壳或强制迁移成熟结构。
+先读 README、当前 Task、适用 Dev/Design/Experiments；科研问题再按需读 Research。优先复用已有接口和工具；不要为规范创建空壳。现行自有科研源码必须进入根目录 `src/`；若仓内维护网站，网站源码、配置和依赖统一进入 `website/`。其余目录可按职责复用成熟结构，历史证据不可因迁移改写。
 
 - 个人开发积极利用 Agent；多人协作提交前理解 diff、检查测试及影响，合并前按风险审阅。
 - `./run.sh ci` 显式准备个人环境并检查；doctor/smoke/audit 不安装。共享运行仅指定获准解释器，不写共享源码/环境、他人工作区或权限。

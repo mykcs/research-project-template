@@ -68,6 +68,30 @@ def source_identity(root: Path = ROOT) -> dict[str, object]:
 def audit_handoff(root: Path = ROOT) -> dict[str, object]:
     findings: list[str] = []
     warnings: list[str] = []
+    source = root / "src"
+    if (
+        source.is_symlink()
+        or not source.is_dir()
+        or not any(
+            path.is_file()
+            and not path.is_symlink()
+            and path.suffix.lower() not in {".md", ".rst", ".txt", ""}
+            and not any(
+                part.startswith(".") or part == "__pycache__"
+                for part in path.relative_to(source).parts
+            )
+            for path in source.rglob("*")
+        )
+    ):
+        findings.append(
+            "Expected actual project source under root src/; no empty directory or symlink."
+        )
+    website = root / "website"
+    if website.is_symlink() or (website.exists() and not website.is_dir()):
+        findings.append("Website, if present, must be an actual root website/ directory.")
+    for pattern in ("astro.config.*", "next.config.*", "nuxt.config.*", "svelte.config.*"):
+        if any(path.is_file() for path in root.glob(pattern)):
+            findings.append(f"Move website framework configuration into website/: {pattern}")
     if not (root / "README.md").is_file():
         warnings.append("No root README; identify the equivalent newcomer entry manually.")
     candidates = [
